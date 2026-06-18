@@ -4,55 +4,21 @@ Enterprise Knowledge Intelligence Platform
 
 ## Overview
 
-Cortexa is a Retrieval-Augmented Generation (RAG) platform designed to transform static documents into an intelligent knowledge base. Users can upload multiple PDF documents and interact with them using natural language queries. The system retrieves relevant information from the uploaded documents and generates context-aware answers with source citations.
+Cortexa is a Retrieval-Augmented Generation (RAG) application that enables users to upload PDF documents and interact with them using natural language questions. The system retrieves relevant document chunks from a vector database and generates context-aware responses using Google's Gemini 2.5 Flash model.
 
-The platform combines semantic search, vector databases, modern language models, and a responsive web interface to provide accurate document-grounded responses.
+The project demonstrates the integration of FastAPI, LangChain, ChromaDB, HuggingFace Embeddings, and Generative AI to build an intelligent document question-answering system.
 
-## Key Features
+## Features
 
-* Multi-document PDF ingestion
+* PDF document upload and processing
 * Semantic search using vector embeddings
 * Retrieval-Augmented Generation (RAG)
-* Source-aware question answering
-* Document-grounded responses
-* Multi-file knowledge base
-* FastAPI backend architecture
-* React-based frontend interface
-* ChromaDB vector storage
+* Context-aware question answering
+* Source citation support
+* FastAPI backend
+* React frontend
+* ChromaDB vector database
 * Gemini 2.5 Flash integration
-* Hallucination-reduction prompt engineering
-
-## Architecture
-
-User Query
-
-↓
-
-React Frontend
-
-↓
-
-FastAPI Backend
-
-↓
-
-Retriever
-
-↓
-
-ChromaDB Vector Store
-
-↓
-
-Relevant Document Chunks
-
-↓
-
-Gemini 2.5 Flash
-
-↓
-
-Answer + Source Citations
 
 ## Technology Stack
 
@@ -60,15 +26,15 @@ Answer + Source Citations
 
 * React
 * Vite
-* Tailwind CSS
 * Axios
+* Tailwind CSS
 
 ### Backend
 
 * FastAPI
 * Python
 
-### AI and RAG
+### AI Components
 
 * LangChain
 * ChromaDB
@@ -79,59 +45,32 @@ Answer + Source Citations
 
 * sentence-transformers/all-MiniLM-L6-v2
 
-## Project Workflow
+## System Workflow
 
-### Document Upload
-
-Users upload one or more PDF documents through the web interface.
-
-### Document Processing
-
-The uploaded documents are processed using PyPDFLoader and split into smaller chunks using RecursiveCharacterTextSplitter.
-
-### Embedding Generation
-
-Each chunk is converted into vector embeddings using HuggingFace sentence transformers.
-
-### Vector Storage
-
-Embeddings are stored in ChromaDB for efficient semantic retrieval.
-
-### Question Answering
-
-When a user submits a query:
-
-1. Relevant chunks are retrieved from ChromaDB.
-2. Context is constructed from retrieved chunks.
-3. Gemini generates an answer using only the retrieved information.
-4. Sources are returned alongside the response.
-
-## Example Use Cases
-
-* Research paper analysis
-* Resume intelligence systems
-* Enterprise document search
-* Knowledge management
-* Academic document querying
-* Internal company documentation assistants
+1. Upload a PDF document.
+2. Extract text using PyPDFLoader.
+3. Split text into chunks.
+4. Generate vector embeddings.
+5. Store embeddings in ChromaDB.
+6. Retrieve relevant chunks based on user queries.
+7. Generate answers using Gemini.
+8. Return answers with source references.
 
 ## API Endpoints
 
-### Upload Document
+### Upload PDF
 
 POST /upload
 
-Uploads and indexes PDF documents into the vector database.
+Uploads a PDF file and indexes its content.
 
 ### Ask Question
 
 POST /ask
 
-Returns document-grounded answers and source citations.
+Accepts a user query and returns a context-aware response with sources.
 
 ## Project Structure
-
-Cortexa
 
 backend/
 
@@ -139,7 +78,6 @@ backend/
 * rag.py
 * ingest.py
 * vector_store.py
-* requirements.txt
 
 frontend/
 
@@ -147,65 +85,45 @@ frontend/
 * components/
 * services/
 
-chroma_db/
-
-data/
-
-README.md
-
 ## Running Locally
 
 ### Backend
 
 ```bash
 cd backend
-
 pip install -r requirements.txt
-
 uvicorn main:app --reload
-```
-
-Backend runs on:
-
-```text
-http://127.0.0.1:8000
 ```
 
 ### Frontend
 
 ```bash
 cd frontend
-
 npm install
-
 npm run dev
 ```
 
-Frontend runs on:
+## Current Status
 
-```text
-http://localhost:5173
-```
+Implemented:
 
-## Current Capabilities
+* PDF Upload
+* Document Chunking
+* Vector Embeddings
+* ChromaDB Integration
+* Semantic Retrieval
+* Gemini-based Answer Generation
+* Source Citations
+* React Frontend
 
-* Multiple PDF document support
-* Semantic document retrieval
-* Context-aware responses
-* Source citations
-* Persistent vector database
-* Full-stack architecture
+Planned Improvements:
 
-## Future Improvements
-
-* User authentication
-* Document-level filtering
-* Chat history and memory
-* Hybrid search
-* DOCX and TXT support
-* Cloud deployment
-* Multi-user support
-* Advanced citation viewer
+* Improved Multi-Document Retrieval
+* Authentication
+* Chat History
+* Document Filtering
+* Cloud Deployment
+* Hybrid Search
 
 ## Author
 
@@ -216,8 +134,3 @@ Integrated B.Tech + M.Tech (Computer Science and Engineering)
 Artificial Intelligence and Robotics Specialization
 
 Gautam Buddha University
-
-## License
-
-This project is intended for educational, research, and portfolio purposes.
-
