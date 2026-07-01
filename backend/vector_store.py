@@ -10,10 +10,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_core.documents import Document
 
-from config import CHROMA_DIR, TOP_K, EMBEDDING_MODEL
+from config import CHROMA_DIR, TOP_K
 
 MMR_FETCH_K = 20
 MMR_LAMBDA = 0.5
+
 
 class VectorStore:
     _instance = None
@@ -149,18 +150,24 @@ class VectorStore:
             })
         return result
 
+
+# Global instance
 _vector_store = VectorStore()
 
+# ----- PUBLIC FUNCTIONS (used by main.py) -----
 def add_documents(documents: List[Document]) -> None:
     _vector_store.add_documents(documents)
 
+
 def delete_document_vectors(filename: str) -> int:
     return _vector_store.delete_document(filename)
+
 
 def search_documents(query: str, k: int = TOP_K,
                      filter_metadata: Optional[Dict] = None,
                      use_mmr: bool = True) -> List[Dict]:
     return _vector_store.search(query, k, filter_metadata, use_mmr)
+
 
 def get_all_documents_metadata() -> List[Dict]:
     return _vector_store.get_all_metadata()
