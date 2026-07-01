@@ -3,100 +3,100 @@ import API from "../services/api";
 
 function ChatBox({ uploaded }) {
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [sources, setSources] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const askQuestion = async () => {
     if (!question.trim()) return;
+    const currentQuestion = question;
+    setMessages((prev) => [...prev, { type: "user", content: currentQuestion }]);
+    setQuestion("");
+    setLoading(true);
 
     try {
-      setLoading(true);
-
-      const res = await API.post("/ask", {
-        question,
-      });
-
-      setAnswer(res.data.answer);
-      setSources(res.data.sources || []);
-
+      const res = await API.post("/ask", { question: currentQuestion });
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "ai",
+          content: res.data.answer,
+          sources: res.data.sources || [],
+        },
+      ]);
     } catch (error) {
       console.error(error);
-      setAnswer("Error getting response");
+      setMessages((prev) => [
+        ...prev,
+        { type: "ai", content: "Error getting response.", sources: [] },
+      ]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 min-h-[600px]">
-
-      <h2 className="text-2xl font-bold mb-4 text-black">
-        💬 Ask Cortexa
-      </h2>
+    <div className="bg-[#0f172a] rounded-2xl shadow-xl p-6 h-[700px] flex flex-col">
+      <h2 className="text-2xl font-bold text-purple-400 mb-4">Cortexa Assistant</h2>
 
       {!uploaded && (
-        <div className="bg-yellow-100 border border-yellow-300 text-yellow-800 p-4 rounded-lg mb-4">
-          Upload a PDF first to start asking questions.
+        <div className="bg-yellow-500/20 border border-yellow-500 text-yellow-300 p-3 rounded-lg mb-4">
+          Upload documents first.
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        {messages.map((msg, index) => (
+          <div key={index}>
+            {msg.type === "user" ? (
+              <div className="flex justify-end">
+                <div className="bg-purple-600 text-white px-4 py-3 rounded-2xl max-w-[80%]">
+                  {msg.content}
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-start">
+                <div className="bg-slate-800 text-white px-4 py-3 rounded-2xl max-w-[80%]">
+                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  {msg.sources?.length > 0 && (
+                    <div className="mt-4 border-t border-slate-700 pt-3">
+                      <p className="text-xs text-purple-300 mb-2">Sources</p>
+                      {msg.sources.map((source, i) => (
+                        <div key={i} className="text-xs text-slate-300">
+                          {source.source.split("/").pop()} • Page {source.page}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-slate-800 text-slate-300 px-4 py-3 rounded-2xl">
+              Analyzing documents...
+            </div>
+          </div>
+        )}
+      </div>
 
+      <div className="mt-4 flex gap-3">
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask something about your document..."
-          className="flex-1 border rounded-lg p-3"
+          onKeyDown={(e) => e.key === "Enter" && askQuestion()}
+          placeholder="Ask anything about your documents..."
+          className="flex-1 bg-slate-800 text-white border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-purple-500"
         />
-
         <button
           onClick={askQuestion}
           disabled={!uploaded || loading}
-          className="bg-black text-white px-6 rounded-lg hover:bg-gray-800 transition"
+          className="bg-purple-600 hover:bg-purple-700 text-white px-6 rounded-xl transition"
         >
-          {loading ? "Thinking..." : "Ask"}
+          Send
         </button>
-
       </div>
-
-      {answer && (
-        <div className="mt-8">
-
-          <h3 className="font-bold text-lg mb-3 text-black">
-            Answer
-          </h3>
-
-          <div className="bg-gray-100 p-4 rounded-xl whitespace-pre-wrap">
-            {answer}
-          </div>
-
-          <h3 className="font-bold text-lg mt-6 mb-3 text-black">
-            Sources
-          </h3>
-
-          <div className="space-y-3">
-
-            {sources.map((source, index) => (
-              <div
-                key={index}
-                className="border rounded-xl p-3 bg-gray-50"
-              >
-                <div className="font-medium">
-                  📄 {source.source.split("/").pop()}
-                </div>
-
-                <div className="text-sm text-gray-600">
-                  Page {source.page}
-                </div>
-              </div>
-            ))}
-
-          </div>
-
-        </div>
-      )}
-
     </div>
   );
 }

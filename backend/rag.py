@@ -1,154 +1,185 @@
 from dotenv import load_dotenv
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+import re
 
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.documents import Document
 
-from vector_store import load_vectorstore
+from config import TOP_K, LLM_MODEL, GOOGLE_API_KEY
+from vector_store import search_documents
 
 load_dotenv()
 
+MODEL_NAME = LLM_MODEL
+TOP_K_RETRIEVAL = TOP_K   # e.g., 15
 
-def ask_question(question):
-
-    # Load Vector Store
-    vectorstore = load_vectorstore()
-
-    retriever = vectorstore.as_retriever(
-        search_type="similarity",
-        search_kwargs={
-            "k": 8
-        }
-    )
-
-    docs = retriever.invoke(question)
-
-    # Remove duplicate chunks
-    unique_docs = []
+# ------------------------------------------------------------------
+# Helpers (unchanged)
+# ------------------------------------------------------------------
+def remove_duplicates(documents: List[Document]) -> List[Document]:
+    unique = []
     seen = set()
-
-    for doc in docs:
-
-        key = (
-            doc.metadata.get("source", ""),
-            doc.metadata.get("page", 0),
-            doc.page_content[:200]
-        )
-
+    for doc in documents:
+        key = (doc.metadata.get("source", ""), doc.metadata.get("page", 0), doc.page_content[:300])
         if key not in seen:
             seen.add(key)
-            unique_docs.append(doc)
+            unique.append(doc)
+    return unique
 
-    docs = unique_docs
+def format_context_with_numbers(documents: List[Document]) -> tuple:
+    context_parts = []
+    sources = []
+    for idx, doc in enumerate(documents, start=1):
+        source = Path(doc.metadata.get("source", "Unknown")).name
+        page = doc.metadata.get("page", 0) + 1
+        context_parts.append(f"""
+[Document {idx}]
+Source: {source}
+Page: {page}
+Content:
+{doc.page_content}
+""")
+        sources.append({
+            "source": source,
+            "page": page,
+            "chunk_number": idx,
+        })
+    return "\n".join(context_parts), sources
 
-    # Special handling for metadata questions
-    metadata_keywords = [
-        "title",
-        "author",
-        "name",
-        "candidate",
-        "student",
-        "guide",
-        "supervisor",
-        "university",
-        "college",
-        "thesis",
-        "dissertation",
-        "abstract"
-    ]
+def collect_sources_from_citations(answer: str, all_sources: List[Dict]) -> List[Dict]:
+    pattern = r'\[(\d+)\]'
+    cited_numbers = set(map(int, re.findall(pattern, answer)))
+    if not cited_numbers:
+        return all_sources
+    cited_sources = [src for src in all_sources if src["chunk_number"] in cited_numbers]
+    return cited_sources if cited_sources else all_sources
 
-    if any(keyword in question.lower() for keyword in metadata_keywords):
-
-        extra_docs = vectorstore.similarity_search(
-            question,
-            k=25
-        )
-
-        first_page_docs = [
-            doc for doc in extra_docs
-            if doc.metadata.get("page", 999) <= 3
-        ]
-
-        docs.extend(first_page_docs)
-
-        unique_docs = []
-        seen = set()
-
-        for doc in docs:
-
-            key = (
-                doc.metadata.get("source", ""),
-                doc.metadata.get("page", 0),
-                doc.page_content[:200]
-            )
-
-            if key not in seen:
-                seen.add(key)
-                unique_docs.append(doc)
-
-        docs = unique_docs
-
+def debug_documents(documents: List[Document]) -> None:
     print("\n==============================")
     print("RETRIEVED DOCUMENTS")
     print("==============================")
-
-    for i, doc in enumerate(docs):
-        print(f"\nDOC {i+1}")
-        print("SOURCE:", doc.metadata.get("source"))
-        print("PAGE:", doc.metadata.get("page"))
-        print("CONTENT PREVIEW:")
-        print(doc.page_content[:500])
-
+    for i, doc in enumerate(documents, start=1):
+        print(f"\nDOC {i}")
+        print("SOURCE:", Path(doc.metadata.get("source", "Unknown")).name)
+        print("PAGE:", doc.metadata.get("page", 0) + 1)
+        print("CONTENT:")
+        print(doc.page_content[:600])
     print("\n==============================\n")
 
-    context = "\n\n".join(
-        [
-            f"PAGE {doc.metadata.get('page', 0) + 1}\n{doc.page_content}"
-            for doc in docs
-        ]
-    )
+# ------------------------------------------------------------------
+# Retrieval with list‑support (unchanged)
+# ------------------------------------------------------------------
+def retrieve_documents(question: str, document_filters: Optional[List[str]] = None) -> List[Document]:
+    filter_meta = None
+    if document_filters:
+        filter_meta = {"filename": {"$in": document_filters}}
 
-    print("\n========== CONTEXT ==========")
-    print(context[:5000])
+    chunks = search_documents(
+        query=question,
+        k=TOP_K_RETRIEVAL,
+        filter_metadata=filter_meta,
+        use_mmr=True
+    )
+    docs = [Document(page_content=chunk["text"], metadata=chunk["metadata"]) for chunk in chunks]
+
+    list_keywords = ["chapter", "chapters", "table of contents", "contents", "list of", "authors", "members", "steps", "sections"]
+    if any(kw in question.lower() for kw in list_keywords):
+        print("\n--- Detected list question, performing exhaustive retrieval ---")
+        extra_chunks = search_documents(
+            query=question,
+            k=30,
+            filter_metadata=filter_meta,
+            use_mmr=False
+        )
+        for chunk in extra_chunks:
+            if "chapter" in chunk["text"].lower() or "contents" in chunk["text"].lower():
+                docs.append(Document(page_content=chunk["text"], metadata=chunk["metadata"]))
+            if chunk["metadata"].get("page", 999) <= 10 and "chapter" in question.lower():
+                docs.append(Document(page_content=chunk["text"], metadata=chunk["metadata"]))
+
+    docs = remove_duplicates(docs)
+    return docs
+
+# ------------------------------------------------------------------
+# Main ask_question with improved prompt for "name" queries
+# ------------------------------------------------------------------
+def ask_question(question: str, document_filters: Optional[List[str]] = None) -> Dict[str, Any]:
+    docs = retrieve_documents(question, document_filters)
+
+    if not docs:
+        return {
+            "answer": "I could not find any relevant information in the uploaded documents.",
+            "sources": []
+        }
+
+    debug_documents(docs)
+    context, all_sources = format_context_with_numbers(docs)
+
+    print("\n========== CONTEXT ==========\n")
+    print(context[:6000])
     print("\n=============================\n")
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash"
+        model=MODEL_NAME,
+        temperature=0.2,
+        google_api_key=GOOGLE_API_KEY
     )
 
+    # Improved prompt with explicit instructions for name/list queries
     prompt = f"""
 You are Cortexa, an Enterprise Knowledge Intelligence Assistant.
 
-Answer ONLY from the provided document context.
+Answer the user's question based **only** on the provided document chunks.
+When you use information from a specific chunk, cite it using [1], [2], etc.
 
-Rules:
-1. Do not make up information.
-2. Answer clearly if the information exists.
-3. Use information from any uploaded document.
-4. If the answer is not present, respond exactly with:
+Guidelines:
+- If the question asks for **names** or **titles** (e.g., "name of the projects", "list the authors"), provide **only the names/titles** – do not include descriptions or extra details.
+- For list questions, extract the complete list from the context.
+- If information is missing, say so clearly.
+- If the answer is not present at all, reply exactly: "I could not find that information in the uploaded documents."
 
-I could not find that information in the uploaded documents.
+Example:
+Question: "Name the projects from the resume."
+Expected answer: "Project A [1], Project B [2], Project C [3]."
 
-Context:
+==========================
+DOCUMENT CONTEXT
+==========================
+
 {context}
 
-Question:
+==========================
+USER QUESTION
+==========================
+
 {question}
 """
 
     response = llm.invoke(prompt)
+    answer = response.content if hasattr(response, "content") else str(response)
 
-    sources = []
+    if not answer.strip():
+        answer = "I could not find that information in the uploaded documents."
 
-    for doc in docs:
+    cited_sources = collect_sources_from_citations(answer, all_sources)
 
-        source_info = {
-            "source": doc.metadata.get("source", "Unknown"),
-            "page": doc.metadata.get("page", 0) + 1
-        }
+    if "I could not find" in answer:
+        cited_sources = []
 
-        if source_info not in sources:
-            sources.append(source_info)
+    print("\n==============================")
+    print("FINAL ANSWER")
+    print("==============================")
+    print(answer)
+    print("==============================\n")
+    print("\n==============================")
+    print("SOURCES (cited)")
+    print("==============================")
+    for src in cited_sources:
+        print(f"{src['source']} | Page {src['page']} (chunk {src['chunk_number']})")
+    print("==============================\n")
 
     return {
-        "answer": response.content,
-        "sources": sources
+        "answer": answer,
+        "sources": cited_sources
     }

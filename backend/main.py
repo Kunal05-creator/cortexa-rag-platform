@@ -6,7 +6,10 @@ import os
 
 from rag import ask_question
 from ingest import load_pdf
-from vector_store import add_documents
+from vector_store import (
+    add_documents,
+    delete_document_vectors,
+)
 
 app = FastAPI(
     title="Cortexa API",
@@ -22,6 +25,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DATA_PATH = "../data"
+
 
 class Query(BaseModel):
     question: str
@@ -30,41 +35,107 @@ class Query(BaseModel):
 @app.get("/")
 def home():
     return {
-        "message": "Cortexa API Running"
+        "app": "Cortexa",
+        "status": "online",
+        "version": "1.0.0"
+    }
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy",
+        "service": "Cortexa API",
+        "version": "1.0.0"
+    }
+
+
+@app.get("/documents")
+def get_documents():
+
+    os.makedirs(DATA_PATH, exist_ok=True)
+
+    documents = []
+
+    for file in sorted(os.listdir(DATA_PATH)):
+
+        if file.lower().endswith(".pdf"):
+
+            file_path = os.path.join(DATA_PATH, file)
+
+            documents.append({
+                "name": file,
+                "size_mb": round(
+                    os.path.getsize(file_path) / 1024 / 1024,
+                    2
+                )
+            })
+
+    return {
+        "count": len(documents),
+        "documents": documents
+    }
+
+@app.delete("/documents/{filename}")
+def delete_document(filename: str):
+
+    file_path = os.path.join(DATA_PATH, filename)
+
+    if not os.path.exists(file_path):
+
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found."
+        )
+
+    deleted_chunks = delete_document_vectors(filename)
+
+    os.remove(file_path)
+
+    return {
+        "success": True,
+        "message": f"{filename} deleted successfully.",
+        "deleted_chunks": deleted_chunks
     }
 
 
 @app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(files: list[UploadFile] = File(...)):
 
     try:
 
-        os.makedirs("../data", exist_ok=True)
+        os.makedirs(DATA_PATH, exist_ok=True)
 
-        file_path = f"../data/{file.filename}"
+        uploaded = []
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        for file in files:
 
-        print(f"\nUploading: {file.filename}")
+            file_path = os.path.join(
+                DATA_PATH,
+                file.filename
+            )
 
-        chunks = load_pdf(file_path)
+            if os.path.exists(file_path):
+                print(f"{file.filename} already exists")
+                continue
 
-        print(f"Total chunks: {len(chunks)}")
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
-        print("\n===== FIRST 5 CHUNKS =====")
+            print(f"\nUploading: {file.filename}")
 
-        for i, chunk in enumerate(chunks[:5]):
-            print(f"\nCHUNK {i+1}")
-            print("PAGE:", chunk.metadata.get("page"))
-            print(chunk.page_content[:300])
+            chunks = load_pdf(file_path)
 
-        print("\n==========================")
+            print(f"Chunks Created: {len(chunks)}")
 
-        add_documents(chunks)
+            add_documents(chunks)
+
+            uploaded.append(file.filename)
 
         return {
-            "message": f"{file.filename} uploaded and indexed successfully"
+            "success": True,
+            "documents": uploaded,
+            "message": f"{len(uploaded)} document(s) uploaded successfully."
         }
 
     except Exception as e:
@@ -77,8 +148,7 @@ async def upload_pdf(file: UploadFile = File(...)):
             status_code=500,
             detail=str(e)
         )
-
-
+    
 @app.post("/ask")
 def ask(query: Query):
 
@@ -93,6 +163,10 @@ def ask(query: Query):
         }
 
     except Exception as e:
+
+        print("\nASK ERROR")
+        print(type(e).__name__)
+        print(str(e))
 
         raise HTTPException(
             status_code=500,

@@ -1,7 +1,13 @@
 ﻿venv/
+<<<<<<< HEAD
 node_modules/
 chroma_db/
 data/
 .env
 __pycache__/
+=======
+__pycache__/
+.env
+chroma_db/
+>>>>>>> 7a43b0fe9385bdfc7fe7a50ad6e1d4630024c4ca
 *.pyc
